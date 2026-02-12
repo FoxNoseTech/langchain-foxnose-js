@@ -1,0 +1,84 @@
+{
+  "name": "@foxnose/langchain",
+  "version": "0.1.0",
+  "description": "LangChain.js integration for FoxNose — the knowledge layer for RAG and AI agents",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/ tests/",
+    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "keywords": [
+    "foxnose",
+    "langchain",
+    "langchainjs",
+    "rag",
+    "ai",
+    "retriever",
+    "document-loader",
+    "vector-search",
+    "hybrid-search",
+    "knowledge-base"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FoxNoseTech/langchain-foxnose-js.git"
+  },
+  "homepage": "https://foxnose.net",
+  "author": "FoxNose <support@foxnose.net> (https://foxnose.net)",
+  "bugs": {
+    "url": "https://github.com/FoxNoseTech/langchain-foxnose-js/issues"
+  },
+  "packageManager": "pnpm@10.29.2",
+  "dependencies": {
+    "@foxnose/sdk": "^0.1.1",
+    "zod": "^3.25.76"
+  },
+  "peerDependencies": {
+    "@langchain/core": ">=0.3.0 <2.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@langchain/core": "^0.3.0",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.39.2",
+    "jiti": "^2.6.1",
+    "prettier": "^3.3.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.55.0",
+    "vitest": "^2.0.0"
+  }
+}
