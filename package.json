@@ -1,6 +1,6 @@
 {
   "name": "@foxnose/langchain",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "LangChain.js integration for FoxNose — the knowledge layer for RAG and AI agents",
   "license": "Apache-2.0",
   "type": "module",
@@ -62,7 +62,7 @@
   },
   "packageManager": "pnpm@10.29.2",
   "dependencies": {
-    "@foxnose/sdk": "^0.1.1",
+    "@foxnose/sdk": "^0.2.3",
     "zod": "^3.25.76"
   },
   "peerDependencies": {
