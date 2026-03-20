@@ -6,7 +6,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { createFoxNoseTool } from '../src/tool.js';
 import { FoxNoseRetriever } from '../src/retriever.js';
-import { createMockFluxClient } from './fixtures.js';
+import { createMockFluxClient, createMockEmbeddings } from './fixtures.js';
 
 // ---------------------------------------------------------------------------
 // Tool creation
@@ -98,7 +98,7 @@ describe('createFoxNoseTool — invocation', () => {
 
   it('returns empty string for empty results', async () => {
     const client = createMockFluxClient({
-      search: vi.fn().mockResolvedValue({ results: [], limit: 5 }),
+      hybridSearch: vi.fn().mockResolvedValue({ results: [], limit: 5 }),
     });
     const tool = createFoxNoseTool({
       client: client as any,
@@ -121,5 +121,42 @@ describe('createFoxNoseTool — invocation', () => {
 
     const result = await tool.invoke({ query: 'test query' });
     expect(result).toContain('\n---\n');
+  });
+
+  it('forwards embeddings and vectorField via inline config', async () => {
+    const client = createMockFluxClient();
+    const embeddings = createMockEmbeddings([0.1, 0.2, 0.3]);
+    const tool = createFoxNoseTool({
+      client: client as any,
+      folderPath: 'articles',
+      pageContentField: 'body',
+      searchMode: 'vector',
+      embeddings: embeddings as any,
+      vectorField: 'embedding',
+    });
+
+    await tool.invoke({ query: 'embed query' });
+    expect(client.vectorFieldSearch).toHaveBeenCalledOnce();
+    expect(embeddings.embedQuery).toHaveBeenCalledWith('embed query');
+    const opts = client.vectorFieldSearch.mock.calls[0][1];
+    expect(opts.field).toBe('embedding');
+    expect(opts.query_vector).toEqual([0.1, 0.2, 0.3]);
+  });
+
+  it('forwards queryVector via inline config', async () => {
+    const client = createMockFluxClient();
+    const tool = createFoxNoseTool({
+      client: client as any,
+      folderPath: 'articles',
+      pageContentField: 'body',
+      searchMode: 'vector',
+      queryVector: [0.5, 0.6],
+      vectorField: 'embedding',
+    });
+
+    await tool.invoke({ query: 'test' });
+    expect(client.vectorFieldSearch).toHaveBeenCalledOnce();
+    const opts = client.vectorFieldSearch.mock.calls[0][1];
+    expect(opts.query_vector).toEqual([0.5, 0.6]);
   });
 });

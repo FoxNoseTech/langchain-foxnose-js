@@ -27,6 +27,8 @@ npm install @foxnose/langchain @foxnose/sdk @langchain/core
 pnpm add @foxnose/langchain @foxnose/sdk @langchain/core
 ```
 
+Requires `@foxnose/sdk` >= 0.3.0 and `@langchain/core` >= 0.3.0.
+
 ## Quick Start
 
 ### Retriever
@@ -125,6 +127,40 @@ const retriever = new FoxNoseRetriever({
   },
 });
 ```
+
+### Custom Embeddings
+
+Use your own embedding model for vector search via the `embeddings` and `vectorField` options:
+
+```typescript
+import { OpenAIEmbeddings } from '@langchain/openai';
+
+const retriever = new FoxNoseRetriever({
+  client,
+  folderPath: 'articles',
+  pageContentField: 'body',
+  searchMode: 'vector',
+  embeddings: new OpenAIEmbeddings({ model: 'text-embedding-3-small' }),
+  vectorField: 'embedding',
+  topK: 10,
+});
+```
+
+Or with a pre-computed vector:
+
+```typescript
+const retriever = new FoxNoseRetriever({
+  client,
+  folderPath: 'articles',
+  pageContentField: 'body',
+  searchMode: 'vector',
+  queryVector: [0.1, 0.2, 0.3, /* ... */],
+  vectorField: 'embedding',
+});
+```
+
+> **Note:** When using `embeddings`, the query text is sent to the embedding
+> provider (e.g. OpenAI) on every invocation.
 
 ### Filtered Retrieval
 
@@ -225,13 +261,16 @@ Extends `BaseRetriever` from `@langchain/core`.
 | `topK` | `number` | `5` | Max results |
 | `searchFields` | `string[]` | — | Text search fields |
 | `textThreshold` | `number` | — | Text search typo tolerance (0–1) |
-| `vectorFields` | `string[]` | — | Vector search fields |
+| `vectorFields` | `string[]` | — | Vector search fields (not supported in `vector_boosted` mode) |
 | `similarityThreshold` | `number` | — | Min cosine similarity (0–1) |
 | `where` | `object` | — | Structured filter |
 | `hybridConfig` | `HybridConfig` | — | Hybrid mode weights |
 | `vectorBoostConfig` | `VectorBoostConfig` | — | Vector-boosted config |
 | `sort` | `string[]` | — | Sort fields |
 | `searchKwargs` | `object` | — | Extra search body params |
+| `embeddings` | `EmbeddingsInterface` | — | LangChain embeddings model for custom vectors |
+| `queryVector` | `number[]` | — | Pre-computed query vector |
+| `vectorField` | `string` | — | Field name for custom-embedding search |
 | `metadataFields` | `string[]` | — | Metadata whitelist |
 | `excludeMetadataFields` | `string[]` | — | Metadata blacklist |
 | `includeSysMetadata` | `boolean` | `true` | Include `_sys` metadata |
