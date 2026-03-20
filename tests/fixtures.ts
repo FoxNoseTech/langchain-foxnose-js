@@ -93,6 +93,10 @@ export interface MockFluxClient {
   search: ReturnType<typeof vi.fn>;
   listResources: ReturnType<typeof vi.fn>;
   getResource: ReturnType<typeof vi.fn>;
+  vectorSearch: ReturnType<typeof vi.fn>;
+  vectorFieldSearch: ReturnType<typeof vi.fn>;
+  hybridSearch: ReturnType<typeof vi.fn>;
+  boostedSearch: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
   apiPrefix: string;
 }
@@ -100,12 +104,28 @@ export interface MockFluxClient {
 export function createMockFluxClient(
   overrides?: Partial<Record<keyof MockFluxClient, unknown>>,
 ): MockFluxClient {
+  const defaultResponse = makeSearchResponse();
   return {
-    search: vi.fn().mockResolvedValue(makeSearchResponse()),
+    search: vi.fn().mockResolvedValue(defaultResponse),
     listResources: vi.fn().mockResolvedValue(makeListResponse()),
     getResource: vi.fn().mockResolvedValue({}),
+    vectorSearch: vi.fn().mockResolvedValue(defaultResponse),
+    vectorFieldSearch: vi.fn().mockResolvedValue(defaultResponse),
+    hybridSearch: vi.fn().mockResolvedValue(defaultResponse),
+    boostedSearch: vi.fn().mockResolvedValue(defaultResponse),
     close: vi.fn(),
     apiPrefix: 'test-api',
     ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mock Embeddings
+// ---------------------------------------------------------------------------
+
+export function createMockEmbeddings(vector: number[] = [0.1, 0.2, 0.3]) {
+  return {
+    embedQuery: vi.fn().mockResolvedValue(vector),
+    embedDocuments: vi.fn().mockResolvedValue([vector]),
   };
 }

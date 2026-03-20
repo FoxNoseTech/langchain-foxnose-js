@@ -95,30 +95,12 @@ export function createFoxNoseTool(options: CreateFoxNoseToolOptions): DynamicStr
   if ('retriever' in options && options.retriever !== undefined) {
     retriever = options.retriever;
   } else {
-    // Build retriever from provided config
-    const config = options as CreateFoxNoseToolFromConfig;
-    retriever = new FoxNoseRetriever({
-      client: config.client,
-      folderPath: config.folderPath,
-      pageContentField: config.pageContentField,
-      pageContentFields: config.pageContentFields,
-      pageContentSeparator: config.pageContentSeparator,
-      pageContentMapper: config.pageContentMapper,
-      metadataFields: config.metadataFields,
-      excludeMetadataFields: config.excludeMetadataFields,
-      includeSysMetadata: config.includeSysMetadata,
-      searchMode: config.searchMode,
-      searchFields: config.searchFields,
-      textThreshold: config.textThreshold,
-      vectorFields: config.vectorFields,
-      similarityThreshold: config.similarityThreshold,
-      topK: config.topK,
-      where: config.where,
-      hybridConfig: config.hybridConfig,
-      vectorBoostConfig: config.vectorBoostConfig,
-      sort: config.sort,
-      searchKwargs: config.searchKwargs,
-    });
+    // Build retriever from provided config — spread-rest pattern
+    // to automatically forward any new retriever fields.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { name: _n, description: _d, documentSeparator: _s, retriever: _r, ...retrieverConfig } =
+      options as CreateFoxNoseToolFromConfig & { retriever?: never };
+    retriever = new FoxNoseRetriever(retrieverConfig);
   }
 
   const schema = z.object({

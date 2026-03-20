@@ -2,7 +2,7 @@
  * Tests for the search body builder.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { buildSearchBody, needsTextSearch, needsVectorSearch } from '../src/search.js';
 
 // ---------------------------------------------------------------------------
@@ -220,5 +220,22 @@ describe('needsVectorSearch', () => {
 
   it('returns false for text mode', () => {
     expect(needsVectorSearch('text')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Deprecation warning
+// ---------------------------------------------------------------------------
+
+describe('buildSearchBody — deprecation', () => {
+  it('emits a deprecation warning on every call', () => {
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    buildSearchBody({ query: 'test', searchMode: 'text' });
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy.mock.calls[0][0]).toMatch(/deprecated/i);
+
+    buildSearchBody({ query: 'test2', searchMode: 'text' });
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
   });
 });

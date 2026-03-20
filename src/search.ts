@@ -88,6 +88,9 @@ export function needsVectorSearch(mode: SearchMode): boolean {
 /**
  * Build a search request body for the FoxNose Flux `_search` endpoint.
  *
+ * @deprecated Since v0.2.0. The retriever now uses SDK convenience methods
+ * directly. This function will be removed in v0.3.0.
+ *
  * This is a **pure function** with no side effects, making it easy to test
  * independently of any client or retriever logic.
  *
@@ -106,6 +109,10 @@ export function needsVectorSearch(mode: SearchMode): boolean {
  * ```
  */
 export function buildSearchBody(params: BuildSearchBodyParams): Record<string, unknown> {
+  console.warn(
+    "buildSearchBody() is deprecated since v0.2.0 and will be removed in v0.3.0. " +
+      "The retriever now uses SDK convenience methods directly.",
+  );
   const {
     query,
     searchMode = 'hybrid',

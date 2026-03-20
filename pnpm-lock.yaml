@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@foxnose/sdk':
-        specifier: ^0.2.3
-        version: 0.2.3
+        specifier: ^0.3.0
+        version: 0.3.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -410,8 +410,8 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@foxnose/sdk@0.2.3':
-    resolution: {integrity: sha512-j+i45hHzPTIj+3mFwQH4qjitwcy8kUaLZFpmaKLCzF7KOiyVb6sadpzYL3R0FjDp+ER2IcZcUmO0VSst9BiByw==}
+  '@foxnose/sdk@0.3.0':
+    resolution: {integrity: sha512-utmAq83OWpG4H9R60YNASTjg2g8wYFQt/ipD8lH1xR/D5UwFZnQRQCr6ttj/uK7kbQ5IIY45YljJfgWv8cs74g==}
     engines: {node: '>=18.0.0'}
 
   '@humanfs/core@0.19.1':
@@ -1756,7 +1756,7 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
-  '@foxnose/sdk@0.2.3': {}
+  '@foxnose/sdk@0.3.0': {}
 
   '@humanfs/core@0.19.1': {}
 
