@@ -2,7 +2,7 @@
  * FoxNose document loader for LangChain.js.
  *
  * Provides {@link FoxNoseLoader}, a LangChain `BaseDocumentLoader` that
- * iterates over all resources in a FoxNose folder with automatic
+ * iterates over all resources in a FoxNose collection with automatic
  * cursor-based pagination.
  *
  * @module
@@ -29,8 +29,16 @@ import { validateLoaderConfig } from './validation.js';
 export interface FoxNoseLoaderInput extends DocumentMapperOptions {
   /** FoxNose Flux client instance. */
   readonly client: FluxClient;
-  /** Folder path in FoxNose (e.g. `"knowledge-base"`). */
-  readonly folderPath: string;
+  /**
+   * Collection path in FoxNose (e.g. `"knowledge-base"`).
+   * Renamed from `folderPath` in 0.3.0.
+   */
+  readonly collectionPath?: string;
+  /**
+   * @deprecated Use {@link collectionPath} instead. Emits a one-shot
+   *   `console.warn` and will be removed in 1.0.
+   */
+  readonly folderPath?: string;
   /**
    * Query parameters forwarded to `listResources`.
    * Useful for server-side filtering and sorting.
@@ -58,7 +66,7 @@ interface ListResourcesResponse {
 /**
  * LangChain document loader backed by FoxNose Flux `listResources`.
  *
- * Iterates over all resources in a FoxNose folder with automatic
+ * Iterates over all resources in a FoxNose collection with automatic
  * cursor-based pagination. Each resource is converted to a LangChain
  * `Document` using the configured content mapping strategy.
  *
@@ -75,7 +83,7 @@ interface ListResourcesResponse {
  *
  * const loader = new FoxNoseLoader({
  *   client,
- *   folderPath: 'knowledge-base',
+ *   collectionPath: 'knowledge-base',
  *   pageContentField: 'body',
  * });
  *
@@ -84,7 +92,8 @@ interface ListResourcesResponse {
  */
 export class FoxNoseLoader extends BaseDocumentLoader {
   private readonly client: FluxClient;
-  private readonly folderPath: string;
+  /** Renamed from `folderPath` in 0.3.0. */
+  private readonly collectionPath: string;
   private readonly params: Record<string, unknown>;
   private readonly batchSize: number;
   private readonly mapperOptions: DocumentMapperOptions;
@@ -92,11 +101,12 @@ export class FoxNoseLoader extends BaseDocumentLoader {
   constructor(fields: FoxNoseLoaderInput) {
     super();
 
-    // Validate configuration
+    // Validate configuration (handles folderPath → collectionPath migration
+    // and emits the deprecation warning on the legacy kwarg).
     validateLoaderConfig(fields);
 
     this.client = fields.client;
-    this.folderPath = fields.folderPath;
+    this.collectionPath = (fields.collectionPath ?? fields.folderPath) as string;
     this.params = fields.params ?? {};
     this.batchSize = fields.batchSize ?? 100;
 
@@ -112,7 +122,7 @@ export class FoxNoseLoader extends BaseDocumentLoader {
   }
 
   /**
-   * Load all documents from the configured FoxNose folder.
+   * Load all documents from the configured FoxNose collection.
    *
    * Performs cursor-based pagination, fetching pages of `batchSize` resources
    * until all resources have been loaded.
@@ -133,7 +143,7 @@ export class FoxNoseLoader extends BaseDocumentLoader {
   /**
    * Lazily load documents page-by-page using an async generator.
    *
-   * Useful for large folders where you want to process documents in batches
+   * Useful for large collections where you want to process documents in batches
    * without holding the entire dataset in memory.
    *
    * @yields An array of LangChain `Document` objects for each page.
@@ -159,7 +169,7 @@ export class FoxNoseLoader extends BaseDocumentLoader {
       }
 
       const response = await this.client.listResources<ListResourcesResponse>(
-        this.folderPath,
+        this.collectionPath,
         requestParams,
       );
 

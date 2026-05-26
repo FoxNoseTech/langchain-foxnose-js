@@ -9,6 +9,7 @@
 
 import type { EmbeddingsInterface } from '@langchain/core/embeddings';
 
+import { warnDeprecatedField } from './_deprecation.js';
 import type { HybridConfig, SearchMode, VectorBoostConfig } from './search.js';
 import type { FoxNoseResult } from './document-mapper.js';
 
@@ -21,8 +22,16 @@ export interface ContentMappingConfig {
   excludeMetadataFields?: string[];
 }
 
+/** FoxNose path fields — exactly one must be provided. */
+export interface CollectionPathConfig {
+  /** Canonical kwarg as of 0.3.0. */
+  collectionPath?: string;
+  /** @deprecated Use {@link CollectionPathConfig.collectionPath} instead. */
+  folderPath?: string;
+}
+
 /** Retriever-specific fields for validation. */
-export interface RetrieverValidationConfig extends ContentMappingConfig {
+export interface RetrieverValidationConfig extends ContentMappingConfig, CollectionPathConfig {
   searchMode?: SearchMode;
   topK?: number;
   textThreshold?: number;
@@ -37,7 +46,7 @@ export interface RetrieverValidationConfig extends ContentMappingConfig {
 }
 
 /** Loader-specific fields for validation. */
-export interface LoaderValidationConfig extends ContentMappingConfig {
+export interface LoaderValidationConfig extends ContentMappingConfig, CollectionPathConfig {
   batchSize?: number;
 }
 
@@ -317,11 +326,35 @@ export function validateEmbeddingConfig(config: RetrieverValidationConfig): void
 }
 
 /**
+ * Validate exactly one of `collectionPath` / `folderPath` is present.
+ *
+ * Emits a one-shot `console.warn` if the legacy `folderPath` kwarg is used.
+ *
+ * @throws {Error} If both or neither field is provided.
+ */
+export function validateCollectionPath(config: CollectionPathConfig): void {
+  const hasCollection = config.collectionPath !== undefined;
+  const hasFolder = config.folderPath !== undefined;
+  if (hasCollection && hasFolder) {
+    throw new Error(
+      "Pass either folderPath (deprecated) or collectionPath, not both.",
+    );
+  }
+  if (!hasCollection && !hasFolder) {
+    throw new Error("'collectionPath' is required.");
+  }
+  if (hasFolder) {
+    warnDeprecatedField('folderPath', 'collectionPath');
+  }
+}
+
+/**
  * Validate all retriever configuration fields.
  *
  * @throws {Error} On any invalid configuration.
  */
 export function validateRetrieverConfig(config: RetrieverValidationConfig): void {
+  validateCollectionPath(config);
   validateContentMapping(config);
   validateMetadataFields(config);
 
@@ -378,6 +411,7 @@ export function validateRetrieverConfig(config: RetrieverValidationConfig): void
  * @throws {Error} On any invalid configuration.
  */
 export function validateLoaderConfig(config: LoaderValidationConfig): void {
+  validateCollectionPath(config);
   validateContentMapping(config);
   validateMetadataFields(config);
 

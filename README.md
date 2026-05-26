@@ -27,7 +27,7 @@ npm install @foxnose/langchain @foxnose/sdk @langchain/core
 pnpm add @foxnose/langchain @foxnose/sdk @langchain/core
 ```
 
-Requires `@foxnose/sdk` >= 0.3.0 and `@langchain/core` >= 0.3.0.
+Requires `@foxnose/sdk` >= 0.4.0 and `@langchain/core` >= 0.3.0.
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ const client = new FluxClient({
 
 const retriever = new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   searchMode: 'hybrid',
   topK: 5,
@@ -57,6 +57,11 @@ for (const doc of docs) {
 }
 ```
 
+> **Note (0.3.0):** The `folderPath` field on `FoxNoseRetriever`, `FoxNoseLoader`,
+> and `createFoxNoseTool` is deprecated in favor of `collectionPath`. The legacy
+> field still works but emits a one-shot `console.warn`; it will be removed in
+> 1.0. Requires `@foxnose/sdk@^0.4.0`.
+
 ### Document Loader
 
 ```typescript
@@ -64,7 +69,7 @@ import { FoxNoseLoader } from '@foxnose/langchain';
 
 const loader = new FoxNoseLoader({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   batchSize: 50,
 });
@@ -80,7 +85,7 @@ import { createFoxNoseTool } from '@foxnose/langchain';
 
 const tool = createFoxNoseTool({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   name: 'search_knowledge_base',
   description: 'Search the knowledge base for relevant articles.',
@@ -104,7 +109,7 @@ const result = await tool.invoke({ query: 'vector search best practices' });
 ```typescript
 const retriever = new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   searchMode: 'vector',
   topK: 10,
@@ -117,7 +122,7 @@ const retriever = new FoxNoseRetriever({
 ```typescript
 const retriever = new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   searchMode: 'hybrid',
   hybridConfig: {
@@ -137,7 +142,7 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 
 const retriever = new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   searchMode: 'vector',
   embeddings: new OpenAIEmbeddings({ model: 'text-embedding-3-small' }),
@@ -151,7 +156,7 @@ Or with a pre-computed vector:
 ```typescript
 const retriever = new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   searchMode: 'vector',
   queryVector: [0.1, 0.2, 0.3, /* ... */],
@@ -167,7 +172,7 @@ const retriever = new FoxNoseRetriever({
 ```typescript
 const retriever = new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   searchMode: 'hybrid',
   where: {
@@ -188,7 +193,7 @@ const retriever = new FoxNoseRetriever({
 ```typescript
 new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
 });
 ```
@@ -198,7 +203,7 @@ new FoxNoseRetriever({
 ```typescript
 new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentFields: ['title', 'body'],
   pageContentSeparator: '\n\n',  // default
 });
@@ -209,7 +214,7 @@ new FoxNoseRetriever({
 ```typescript
 new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentMapper: (result) =>
     `# ${result.data?.title}\n\n${result.data?.body}`,
 });
@@ -221,7 +226,7 @@ new FoxNoseRetriever({
 // Whitelist specific fields
 new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   metadataFields: ['title', 'category'],
 });
@@ -229,7 +234,7 @@ new FoxNoseRetriever({
 // Blacklist specific fields
 new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   excludeMetadataFields: ['internal_notes'],
 });
@@ -237,7 +242,7 @@ new FoxNoseRetriever({
 // Disable system metadata (_sys fields)
 new FoxNoseRetriever({
   client,
-  folderPath: 'articles',
+  collectionPath: 'articles',
   pageContentField: 'body',
   includeSysMetadata: false,
 });
@@ -252,7 +257,8 @@ Extends `BaseRetriever` from `@langchain/core`.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `client` | `FluxClient` | *required* | FoxNose Flux client instance |
-| `folderPath` | `string` | *required* | Folder path in FoxNose |
+| `collectionPath` | `string` | *required* | Collection path in FoxNose |
+| `folderPath` | `string` | — | **Deprecated**. Legacy alias for `collectionPath`; emits a one-shot `console.warn`. Removed in 1.0. |
 | `pageContentField` | `string` | — | Single data field for `pageContent` |
 | `pageContentFields` | `string[]` | — | Multiple fields concatenated |
 | `pageContentSeparator` | `string` | `"\n\n"` | Separator for multi-field content |
@@ -282,7 +288,8 @@ Extends `BaseDocumentLoader` from `@langchain/core`.
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `client` | `FluxClient` | *required* | FoxNose Flux client instance |
-| `folderPath` | `string` | *required* | Folder path in FoxNose |
+| `collectionPath` | `string` | *required* | Collection path in FoxNose |
+| `folderPath` | `string` | — | **Deprecated**. Legacy alias for `collectionPath`; emits a one-shot `console.warn`. Removed in 1.0. |
 | `batchSize` | `number` | `100` | Page size for pagination |
 | `params` | `object` | — | Query params for `listResources` |
 | *(content mapping)* | | | Same as FoxNoseRetriever |
