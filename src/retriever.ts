@@ -38,8 +38,16 @@ import {
 export interface FoxNoseRetrieverInput extends BaseRetrieverInput, DocumentMapperOptions {
   /** FoxNose Flux client instance. */
   readonly client: FluxClient;
-  /** Folder path in FoxNose (e.g. `"knowledge-base"`). */
-  readonly folderPath: string;
+  /**
+   * Collection path in FoxNose (e.g. `"knowledge-base"`).
+   * Renamed from `folderPath` in 0.3.0.
+   */
+  readonly collectionPath?: string;
+  /**
+   * @deprecated Use {@link collectionPath} instead. Emits a one-shot
+   *   `console.warn` and will be removed in 1.0.
+   */
+  readonly folderPath?: string;
 
   // --- Search configuration ---
 
@@ -132,7 +140,7 @@ export interface FoxNoseRetrieverInput extends BaseRetrieverInput, DocumentMappe
  *
  * const retriever = new FoxNoseRetriever({
  *   client,
- *   folderPath: 'knowledge-base',
+ *   collectionPath: 'knowledge-base',
  *   pageContentField: 'body',
  *   searchMode: 'hybrid',
  *   topK: 5,
@@ -151,7 +159,8 @@ export class FoxNoseRetriever extends BaseRetriever {
   // --- Internals (readonly after construction) ---
 
   private readonly client: FluxClient;
-  private readonly folderPath: string;
+  /** Renamed from `folderPath` in 0.3.0. */
+  private readonly collectionPath: string;
 
   // Search config
   private readonly searchMode: SearchMode;
@@ -177,11 +186,15 @@ export class FoxNoseRetriever extends BaseRetriever {
   constructor(fields: FoxNoseRetrieverInput) {
     super(fields);
 
-    // Validate all configuration up-front
+    // Validate all configuration up-front (handles folderPath → collectionPath
+    // migration as well; emits the deprecation warning and resolves the canonical
+    // value before assignment below).
     validateRetrieverConfig(fields);
 
     this.client = fields.client;
-    this.folderPath = fields.folderPath;
+    // Resolve collectionPath from canonical or legacy kwarg. validateRetrieverConfig
+    // has already enforced exactly-one-of and emitted the deprecation warning.
+    this.collectionPath = (fields.collectionPath ?? fields.folderPath) as string;
 
     // Search config with defaults
     this.searchMode = fields.searchMode ?? 'hybrid';
@@ -276,13 +289,13 @@ export class FoxNoseRetriever extends BaseRetriever {
     // Extra from searchKwargs may override instance where/sort
     const { extra } = splitSearchKwargs(this.searchKwargs);
     Object.assign(body, extra);
-    return this.client.search(this.folderPath, body);
+    return this.client.search(this.collectionPath, body);
   }
 
   private async searchVector(query: string, named: { limit?: number; offset?: number }, extraBody: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (this.vectorField !== undefined) {
       const qv = await this.resolveQueryVector(query);
-      return this.client.vectorFieldSearch(this.folderPath, {
+      return this.client.vectorFieldSearch(this.collectionPath, {
         field: this.vectorField,
         query_vector: qv,
         top_k: this.topK,
@@ -292,7 +305,7 @@ export class FoxNoseRetriever extends BaseRetriever {
         ...extraBody,
       });
     }
-    return this.client.vectorSearch(this.folderPath, {
+    return this.client.vectorSearch(this.collectionPath, {
       query,
       fields: this.vectorFields,
       top_k: this.topK,
@@ -305,7 +318,7 @@ export class FoxNoseRetriever extends BaseRetriever {
 
   private async searchHybrid(query: string, named: { limit?: number; offset?: number }, extraBody: Record<string, unknown>): Promise<Record<string, unknown>> {
     const hc = this.hybridConfig ?? {};
-    return this.client.hybridSearch(this.folderPath, {
+    return this.client.hybridSearch(this.collectionPath, {
       query,
       find_text: this.buildFindText(query),
       fields: this.vectorFields,
@@ -339,7 +352,7 @@ export class FoxNoseRetriever extends BaseRetriever {
     } else {
       base.query = query;
     }
-    return this.client.boostedSearch(this.folderPath, { ...base, ...extraBody });
+    return this.client.boostedSearch(this.collectionPath, { ...base, ...extraBody });
   }
 
   // --- Main retrieval ---
