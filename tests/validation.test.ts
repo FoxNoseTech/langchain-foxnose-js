@@ -101,7 +101,7 @@ describe('validateMetadataFields', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateRetrieverConfig', () => {
-  const base = { pageContentField: 'body' };
+  const base = { collectionPath: 'kb', pageContentField: 'body' };
 
   it('throws for invalid searchMode', () => {
     expect(() => validateRetrieverConfig({ ...base, searchMode: 'invalid' as any })).toThrow(
@@ -445,7 +445,7 @@ describe('validateEmbeddingConfig', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateLoaderConfig', () => {
-  const base = { pageContentField: 'body' };
+  const base = { collectionPath: 'kb', pageContentField: 'body' };
 
   it('throws for batchSize = 0', () => {
     expect(() => validateLoaderConfig({ ...base, batchSize: 0 })).toThrow(/batchSize must be/i);

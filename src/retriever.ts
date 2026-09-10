@@ -38,8 +38,16 @@ import {
 export interface FoxNoseRetrieverInput extends BaseRetrieverInput, DocumentMapperOptions {
   /** FoxNose Flux client instance. */
   readonly client: FluxClient;
-  /** Folder path in FoxNose (e.g. `"knowledge-base"`). */
-  readonly folderPath: string;
+  /**
+   * Collection path in FoxNose (e.g. `"knowledge-base"`).
+   * Renamed from `folderPath` in 0.3.0.
+   */
+  readonly collectionPath?: string;
+  /**
+   * @deprecated Use {@link collectionPath} instead. Emits a one-shot
+   *   `console.warn` and will be removed in 1.0.
+   */
+  readonly folderPath?: string;
 
   // --- Search configuration ---
 
@@ -73,6 +81,22 @@ export interface FoxNoseRetrieverInput extends BaseRetrieverInput, DocumentMappe
   readonly vectorBoostConfig?: VectorBoostConfig;
   /** Sort fields (prefix with `-` for descending). */
   readonly sort?: string[];
+  /**
+   * Cap the length of `text`-typed fields server-side, in characters.
+   *
+   * Sent as the `truncate_text` QUERY-STRING parameter, not in the request
+   * body — the body rejects it. Cheaper than trimming client-side, because
+   * the payload never crosses the wire in full.
+   */
+  readonly truncateText?: number;
+  /**
+   * Extra query-string parameters for the search request.
+   *
+   * Setting `truncate_text` here AND via `truncateText` is rejected at
+   * construction rather than silently resolved. Distinct from `searchKwargs`,
+   * which goes into the request BODY and rejects these keys.
+   */
+  readonly queryParams?: Record<string, unknown>;
   /**
    * Extra parameters merged into the search request.
    *
@@ -132,7 +156,7 @@ export interface FoxNoseRetrieverInput extends BaseRetrieverInput, DocumentMappe
  *
  * const retriever = new FoxNoseRetriever({
  *   client,
- *   folderPath: 'knowledge-base',
+ *   collectionPath: 'knowledge-base',
  *   pageContentField: 'body',
  *   searchMode: 'hybrid',
  *   topK: 5,
@@ -151,7 +175,8 @@ export class FoxNoseRetriever extends BaseRetriever {
   // --- Internals (readonly after construction) ---
 
   private readonly client: FluxClient;
-  private readonly folderPath: string;
+  /** Renamed from `folderPath` in 0.3.0. */
+  private readonly collectionPath: string;
 
   // Search config
   private readonly searchMode: SearchMode;
@@ -160,6 +185,8 @@ export class FoxNoseRetriever extends BaseRetriever {
   private readonly vectorFields?: string[];
   private readonly similarityThreshold?: number;
   private readonly topK: number;
+  private readonly truncateText?: number;
+  private readonly queryParams?: Record<string, unknown>;
   private readonly where?: Record<string, unknown>;
   private readonly hybridConfig?: HybridConfig;
   private readonly vectorBoostConfig?: VectorBoostConfig;
@@ -177,11 +204,15 @@ export class FoxNoseRetriever extends BaseRetriever {
   constructor(fields: FoxNoseRetrieverInput) {
     super(fields);
 
-    // Validate all configuration up-front
+    // Validate all configuration up-front (handles folderPath → collectionPath
+    // migration as well; emits the deprecation warning and resolves the canonical
+    // value before assignment below).
     validateRetrieverConfig(fields);
 
     this.client = fields.client;
-    this.folderPath = fields.folderPath;
+    // Resolve collectionPath from canonical or legacy kwarg. validateRetrieverConfig
+    // has already enforced exactly-one-of and emitted the deprecation warning.
+    this.collectionPath = (fields.collectionPath ?? fields.folderPath) as string;
 
     // Search config with defaults
     this.searchMode = fields.searchMode ?? 'hybrid';
@@ -194,6 +225,8 @@ export class FoxNoseRetriever extends BaseRetriever {
     this.hybridConfig = fields.hybridConfig;
     this.vectorBoostConfig = fields.vectorBoostConfig;
     this.sort = fields.sort;
+    this.truncateText = fields.truncateText;
+    this.queryParams = fields.queryParams;
     this.searchKwargs = fields.searchKwargs ?? {};
 
     // Custom embeddings
@@ -256,6 +289,19 @@ export class FoxNoseRetriever extends BaseRetriever {
     throw new Error("vectorField mode requires 'embeddings' or 'queryVector'.");
   }
 
+  /**
+   * Query-string parameters for a search request, or undefined when there are
+   * none. Setting `truncate_text` through both options is rejected at
+   * construction, so there is no conflict to resolve here.
+   */
+  private buildQueryParams(): Record<string, unknown> | undefined {
+    const params: Record<string, unknown> = { ...(this.queryParams ?? {}) };
+    if (this.truncateText !== undefined) {
+      params.truncate_text = this.truncateText;
+    }
+    return Object.keys(params).length > 0 ? params : undefined;
+  }
+
   // --- Per-mode dispatch ---
 
   private async searchText(query: string, named: { limit?: number; offset?: number }, _extraBody: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -276,36 +322,38 @@ export class FoxNoseRetriever extends BaseRetriever {
     // Extra from searchKwargs may override instance where/sort
     const { extra } = splitSearchKwargs(this.searchKwargs);
     Object.assign(body, extra);
-    return this.client.search(this.folderPath, body);
+    return this.client.search(this.collectionPath, body, { params: this.buildQueryParams() });
   }
 
   private async searchVector(query: string, named: { limit?: number; offset?: number }, extraBody: Record<string, unknown>): Promise<Record<string, unknown>> {
     if (this.vectorField !== undefined) {
       const qv = await this.resolveQueryVector(query);
-      return this.client.vectorFieldSearch(this.folderPath, {
+      return this.client.vectorFieldSearch(this.collectionPath, {
         field: this.vectorField,
         query_vector: qv,
         top_k: this.topK,
         similarity_threshold: this.similarityThreshold,
         limit: named.limit ?? this.topK,
         offset: named.offset,
+        queryParams: this.buildQueryParams(),
         ...extraBody,
       });
     }
-    return this.client.vectorSearch(this.folderPath, {
+    return this.client.vectorSearch(this.collectionPath, {
       query,
       fields: this.vectorFields,
       top_k: this.topK,
       similarity_threshold: this.similarityThreshold,
       limit: named.limit ?? this.topK,
       offset: named.offset,
+      queryParams: this.buildQueryParams(),
       ...extraBody,
     });
   }
 
   private async searchHybrid(query: string, named: { limit?: number; offset?: number }, extraBody: Record<string, unknown>): Promise<Record<string, unknown>> {
     const hc = this.hybridConfig ?? {};
-    return this.client.hybridSearch(this.folderPath, {
+    return this.client.hybridSearch(this.collectionPath, {
       query,
       find_text: this.buildFindText(query),
       fields: this.vectorFields,
@@ -316,6 +364,7 @@ export class FoxNoseRetriever extends BaseRetriever {
       rerank_results: hc.rerankResults ?? true,
       limit: named.limit ?? this.topK,
       offset: named.offset,
+      queryParams: this.buildQueryParams(),
       ...extraBody,
     });
   }
@@ -331,6 +380,7 @@ export class FoxNoseRetriever extends BaseRetriever {
       max_boost_results: bc.maxBoostResults ?? 20,
       limit: named.limit ?? this.topK,
       offset: named.offset,
+      queryParams: this.buildQueryParams(),
     };
     if (this.vectorField !== undefined) {
       const qv = await this.resolveQueryVector(query);
@@ -339,7 +389,7 @@ export class FoxNoseRetriever extends BaseRetriever {
     } else {
       base.query = query;
     }
-    return this.client.boostedSearch(this.folderPath, { ...base, ...extraBody });
+    return this.client.boostedSearch(this.collectionPath, { ...base, ...extraBody });
   }
 
   // --- Main retrieval ---

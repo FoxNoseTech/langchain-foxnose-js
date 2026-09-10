@@ -9,6 +9,7 @@
 
 import type { EmbeddingsInterface } from '@langchain/core/embeddings';
 
+import { warnDeprecatedField } from './_deprecation.js';
 import type { HybridConfig, SearchMode, VectorBoostConfig } from './search.js';
 import type { FoxNoseResult } from './document-mapper.js';
 
@@ -21,8 +22,16 @@ export interface ContentMappingConfig {
   excludeMetadataFields?: string[];
 }
 
+/** FoxNose path fields — exactly one must be provided. */
+export interface CollectionPathConfig {
+  /** Canonical kwarg as of 0.3.0. */
+  collectionPath?: string;
+  /** @deprecated Use {@link CollectionPathConfig.collectionPath} instead. */
+  folderPath?: string;
+}
+
 /** Retriever-specific fields for validation. */
-export interface RetrieverValidationConfig extends ContentMappingConfig {
+export interface RetrieverValidationConfig extends ContentMappingConfig, CollectionPathConfig {
   searchMode?: SearchMode;
   topK?: number;
   textThreshold?: number;
@@ -34,14 +43,34 @@ export interface RetrieverValidationConfig extends ContentMappingConfig {
   vectorField?: string;
   hybridConfig?: HybridConfig;
   vectorBoostConfig?: VectorBoostConfig;
+  truncateText?: number;
+  queryParams?: Record<string, unknown>;
 }
 
 /** Loader-specific fields for validation. */
-export interface LoaderValidationConfig extends ContentMappingConfig {
+export interface LoaderValidationConfig extends ContentMappingConfig, CollectionPathConfig {
   batchSize?: number;
+  truncateText?: number;
+  params?: Record<string, unknown>;
 }
 
 const VALID_SEARCH_MODES = new Set<string>(['text', 'vector', 'hybrid', 'vector_boosted']);
+
+/**
+ * Keys that belong in the query string, not the request body.
+ *
+ * The SDK rejects `truncate_text` in the body, and `queryParams` would be
+ * forwarded as a nonsense body field. Both have dedicated parameters.
+ */
+const QUERY_STRING_SEARCH_KWARGS = new Set(['truncate_text', 'queryParams', 'query_params']);
+
+/** Shared check for the `truncateText` option. */
+function validateTruncateText(value: number | undefined): void {
+  if (value === undefined) return;
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`truncateText must be an integer >= 1, got ${value}.`);
+  }
+}
 
 /** Keys that conflict with SDK SearchRequest fields or convenience method params. */
 const CONFLICTING_SEARCH_KWARGS = new Set([
@@ -143,6 +172,20 @@ export function validateSearchKwargs(kwargs: Record<string, unknown> | undefined
     throw new Error(
       `searchKwargs contains conflicting keys: ${conflicts.sort().join(', ')}. ` +
         'Use the explicit parameters instead.',
+    );
+  }
+
+  // Query-string keys reach the request BODY through searchKwargs, where the
+  // API rejects them -- in text mode as an invalid body field, in the others
+  // as an unexpected argument. Fail here instead, naming the right parameter.
+  const queryStringKeys = Object.keys(kwargs).filter((key) =>
+    QUERY_STRING_SEARCH_KWARGS.has(key),
+  );
+  if (queryStringKeys.length > 0) {
+    throw new Error(
+      `searchKwargs must not contain query-string parameters: ` +
+        `${queryStringKeys.sort().join(', ')}. ` +
+        `Use the 'truncateText' or 'queryParams' options instead.`,
     );
   }
 
@@ -317,11 +360,35 @@ export function validateEmbeddingConfig(config: RetrieverValidationConfig): void
 }
 
 /**
+ * Validate exactly one of `collectionPath` / `folderPath` is present.
+ *
+ * Emits a one-shot `console.warn` if the legacy `folderPath` kwarg is used.
+ *
+ * @throws {Error} If both or neither field is provided.
+ */
+export function validateCollectionPath(config: CollectionPathConfig): void {
+  const hasCollection = config.collectionPath !== undefined;
+  const hasFolder = config.folderPath !== undefined;
+  if (hasCollection && hasFolder) {
+    throw new Error(
+      "Pass either folderPath (deprecated) or collectionPath, not both.",
+    );
+  }
+  if (!hasCollection && !hasFolder) {
+    throw new Error("'collectionPath' is required.");
+  }
+  if (hasFolder) {
+    warnDeprecatedField('folderPath', 'collectionPath');
+  }
+}
+
+/**
  * Validate all retriever configuration fields.
  *
  * @throws {Error} On any invalid configuration.
  */
 export function validateRetrieverConfig(config: RetrieverValidationConfig): void {
+  validateCollectionPath(config);
   validateContentMapping(config);
   validateMetadataFields(config);
 
@@ -336,6 +403,16 @@ export function validateRetrieverConfig(config: RetrieverValidationConfig): void
   const topK = config.topK ?? 5;
   if (!Number.isInteger(topK) || topK < 1) {
     throw new Error(`topK must be an integer >= 1, got ${topK}.`);
+  }
+
+  validateTruncateText(config.truncateText);
+  if (
+    config.truncateText !== undefined &&
+    config.queryParams !== undefined &&
+    Object.hasOwn(config.queryParams, 'truncate_text')
+  ) {
+    // Silently picking a winner would make the ignored one look effective.
+    throw new Error('truncateText is set both directly and inside queryParams. Set only one.');
   }
 
   if (config.textThreshold !== undefined && (!Number.isFinite(config.textThreshold) || config.textThreshold < 0 || config.textThreshold > 1)) {
@@ -378,11 +455,22 @@ export function validateRetrieverConfig(config: RetrieverValidationConfig): void
  * @throws {Error} On any invalid configuration.
  */
 export function validateLoaderConfig(config: LoaderValidationConfig): void {
+  validateCollectionPath(config);
   validateContentMapping(config);
   validateMetadataFields(config);
 
   const batchSize = config.batchSize ?? 100;
   if (batchSize < 1) {
     throw new Error(`batchSize must be >= 1, got ${batchSize}.`);
+  }
+
+  validateTruncateText(config.truncateText);
+  if (
+    config.truncateText !== undefined &&
+    config.params !== undefined &&
+    Object.hasOwn(config.params, 'truncate_text')
+  ) {
+    // Silently picking a winner would make the ignored one look effective.
+    throw new Error('truncateText is set both directly and inside params. Set only one.');
   }
 }

@@ -2,7 +2,7 @@
  * FoxNose document loader for LangChain.js.
  *
  * Provides {@link FoxNoseLoader}, a LangChain `BaseDocumentLoader` that
- * iterates over all resources in a FoxNose folder with automatic
+ * iterates over all resources in a FoxNose collection with automatic
  * cursor-based pagination.
  *
  * @module
@@ -29,18 +29,62 @@ import { validateLoaderConfig } from './validation.js';
 export interface FoxNoseLoaderInput extends DocumentMapperOptions {
   /** FoxNose Flux client instance. */
   readonly client: FluxClient;
-  /** Folder path in FoxNose (e.g. `"knowledge-base"`). */
-  readonly folderPath: string;
+  /**
+   * Collection path in FoxNose (e.g. `"knowledge-base"`).
+   * Renamed from `folderPath` in 0.3.0.
+   */
+  readonly collectionPath?: string;
+  /**
+   * @deprecated Use {@link collectionPath} instead. Emits a one-shot
+   *   `console.warn` and will be removed in 1.0.
+   */
+  readonly folderPath?: string;
   /**
    * Query parameters forwarded to `listResources`.
    * Useful for server-side filtering and sorting.
    */
   readonly params?: Record<string, unknown>;
   /**
+   * Cap the length of `text`-typed fields server-side, in characters.
+   *
+   * A named shorthand for `params.truncate_text`. Setting both is rejected at
+   * construction rather than silently resolved.
+   */
+  readonly truncateText?: number;
+  /**
    * Page size for `listResources` calls.
    * @default 100
    */
   readonly batchSize?: number;
+}
+
+/**
+ * Reduce a `next` field to the token the `next` query parameter accepts.
+ *
+ * FoxNose returns `next` as a FULL URL, e.g.
+ * `https://host/api/articles?limit=2&next=9avd3azzc0tp`, not as the opaque
+ * token the parameter takes. Sending the whole URL back means the backend
+ * cannot parse it, silently answers with page one again and returns the same
+ * `next` — an infinite loop that re-fetches the first page forever. A plain
+ * token is passed through unchanged.
+ *
+ * @internal
+ */
+export function extractCursor(nextValue: unknown): string | null {
+  if (typeof nextValue !== 'string' || nextValue === '') {
+    return null;
+  }
+  if (!nextValue.includes('://')) {
+    return nextValue;
+  }
+  try {
+    // `?next=` parses to an empty string, not null. Following it would send an
+    // empty cursor and re-fetch page one; Python's parse_qs drops blank values,
+    // so treating it as the end is also what keeps the two packages aligned.
+    return new URL(nextValue).searchParams.get('next') || null;
+  } catch {
+    return null;
+  }
 }
 
 /** Shape of a paginated `listResources` response from the Flux API. */
@@ -58,7 +102,7 @@ interface ListResourcesResponse {
 /**
  * LangChain document loader backed by FoxNose Flux `listResources`.
  *
- * Iterates over all resources in a FoxNose folder with automatic
+ * Iterates over all resources in a FoxNose collection with automatic
  * cursor-based pagination. Each resource is converted to a LangChain
  * `Document` using the configured content mapping strategy.
  *
@@ -75,7 +119,7 @@ interface ListResourcesResponse {
  *
  * const loader = new FoxNoseLoader({
  *   client,
- *   folderPath: 'knowledge-base',
+ *   collectionPath: 'knowledge-base',
  *   pageContentField: 'body',
  * });
  *
@@ -84,20 +128,24 @@ interface ListResourcesResponse {
  */
 export class FoxNoseLoader extends BaseDocumentLoader {
   private readonly client: FluxClient;
-  private readonly folderPath: string;
+  /** Renamed from `folderPath` in 0.3.0. */
+  private readonly collectionPath: string;
   private readonly params: Record<string, unknown>;
+  private readonly truncateText?: number;
   private readonly batchSize: number;
   private readonly mapperOptions: DocumentMapperOptions;
 
   constructor(fields: FoxNoseLoaderInput) {
     super();
 
-    // Validate configuration
+    // Validate configuration (handles folderPath → collectionPath migration
+    // and emits the deprecation warning on the legacy kwarg).
     validateLoaderConfig(fields);
 
     this.client = fields.client;
-    this.folderPath = fields.folderPath;
+    this.collectionPath = (fields.collectionPath ?? fields.folderPath) as string;
     this.params = fields.params ?? {};
+    this.truncateText = fields.truncateText;
     this.batchSize = fields.batchSize ?? 100;
 
     this.mapperOptions = {
@@ -112,7 +160,7 @@ export class FoxNoseLoader extends BaseDocumentLoader {
   }
 
   /**
-   * Load all documents from the configured FoxNose folder.
+   * Load all documents from the configured FoxNose collection.
    *
    * Performs cursor-based pagination, fetching pages of `batchSize` resources
    * until all resources have been loaded.
@@ -133,7 +181,7 @@ export class FoxNoseLoader extends BaseDocumentLoader {
   /**
    * Lazily load documents page-by-page using an async generator.
    *
-   * Useful for large folders where you want to process documents in batches
+   * Useful for large collections where you want to process documents in batches
    * without holding the entire dataset in memory.
    *
    * @yields An array of LangChain `Document` objects for each page.
@@ -148,18 +196,22 @@ export class FoxNoseLoader extends BaseDocumentLoader {
    */
   async *loadLazy(): AsyncGenerator<Document[]> {
     let cursor: string | null = null;
+    const seen = new Set<string>();
 
-    do {
+    for (;;) {
       const requestParams: Record<string, unknown> = {
         ...this.params,
         limit: this.batchSize,
       };
+      if (this.truncateText !== undefined) {
+        requestParams.truncate_text = this.truncateText;
+      }
       if (cursor !== null) {
         requestParams.next = cursor;
       }
 
       const response = await this.client.listResources<ListResourcesResponse>(
-        this.folderPath,
+        this.collectionPath,
         requestParams,
       );
 
@@ -170,7 +222,15 @@ export class FoxNoseLoader extends BaseDocumentLoader {
         yield mapped;
       }
 
-      cursor = response?.next ?? null;
-    } while (cursor !== null);
+      const nextCursor = extractCursor(response?.next);
+      // Every cursor is followed at most once. Stopping only when the cursor
+      // repeats the PREVIOUS one would still spin forever on a cycle
+      // (A -> B -> A), and would re-yield the repeated page before noticing.
+      if (nextCursor === null || seen.has(nextCursor)) {
+        break;
+      }
+      seen.add(nextCursor);
+      cursor = nextCursor;
+    }
   }
 }

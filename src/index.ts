@@ -18,7 +18,12 @@ export type {
 } from './tool.js';
 
 // Re-export utility types for advanced users
-export type { SearchMode, HybridConfig, VectorBoostConfig, BuildSearchBodyParams } from './search.js';
-export { buildSearchBody, needsTextSearch, needsVectorSearch } from './search.js';
+export type { SearchMode, HybridConfig, VectorBoostConfig } from './search.js';
+export { needsTextSearch, needsVectorSearch } from './search.js';
 export type { FoxNoseResult, PageContentMapper, DocumentMapperOptions } from './document-mapper.js';
 export { mapResultsToDocuments } from './document-mapper.js';
+
+export { FoxNoseWriter, FoxNoseBatchWriteError } from './writer.js';
+export type { FoxNoseWriterInput } from './writer.js';
+export type { DocumentMapper, DocumentWriterOptions } from './document-writer.js';
+export { mapDocumentToData, SYS_METADATA_KEYS } from './document-writer.js';

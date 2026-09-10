@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { FoxNoseLoader } from '../src/loader.js';
+import { FoxNoseLoader, extractCursor } from '../src/loader.js';
 import {
   createMockFluxClient,
   SAMPLE_RESULTS,
@@ -162,6 +162,108 @@ describe('FoxNoseLoader — load', () => {
     // Second call should include cursor
     const secondParams = client.listResources.mock.calls[1][1];
     expect(secondParams.next).toBe('cursor_abc');
+  });
+
+  describe('URL-shaped cursors', () => {
+    // FoxNose returns `next` as a FULL URL, not the opaque token the parameter
+    // accepts. Feeding the URL straight back made the backend answer with page
+    // one and the same `next`, so load() re-fetched the first page forever.
+    // The mocks elsewhere in this file model an opaque token, which is exactly
+    // why the suite missed it.
+    const url = (token: string, limit = 2) =>
+      `https://example.invalid/api/articles?limit=${limit}&next=${token}`;
+
+    it('reduces a URL-shaped cursor to its token', () => {
+      expect(extractCursor(url('abc123'))).toBe('abc123');
+    });
+
+    it('passes a plain token through unchanged', () => {
+      expect(extractCursor('abc123')).toBe('abc123');
+    });
+
+    it.each([null, undefined, '', 'https://host/api/articles?limit=2', 'https://host/api/articles?limit=2&next=', 42, { a: 1 }])(
+      'treats %p as the end of pagination',
+      (value) => {
+        expect(extractCursor(value)).toBeNull();
+      },
+    );
+
+    it.each(['://', 'http://', 'https://[', 'foo://bar baz'])(
+      'ends pagination on %p, which looks like a URL but does not parse',
+      (value) => {
+        // The `://` test routes these into the URL parser, which throws. A
+        // cursor nobody can read is the end of the road, not a crash.
+        expect(extractCursor(value)).toBeNull();
+      },
+    );
+
+    it('sends the extracted token, not the whole URL', async () => {
+      const client = createMockFluxClient({
+        listResources: vi
+          .fn()
+          .mockResolvedValueOnce(
+            makeListResponse(SAMPLE_RESULTS.slice(0, 2), { count: 3, nextCursor: url('page2') }),
+          )
+          .mockResolvedValueOnce(
+            makeListResponse(SAMPLE_RESULTS.slice(2), { count: 3, nextCursor: null }),
+          ),
+      });
+
+      const docs = await new FoxNoseLoader({
+        client: client as any,
+        collectionPath: 'articles',
+        pageContentField: 'body',
+        batchSize: 2,
+      }).load();
+
+      expect(docs).toHaveLength(3);
+      expect(client.listResources.mock.calls[1][1].next).toBe('page2');
+    });
+
+    it('stops when the cursor does not advance', async () => {
+      // The live failure mode: same page, same `next`, forever.
+      const stuck = makeListResponse(SAMPLE_RESULTS.slice(0, 2), {
+        count: 3,
+        nextCursor: url('stuck'),
+      });
+      const listResources = vi.fn().mockResolvedValue(stuck);
+      const client = createMockFluxClient({ listResources });
+
+      const docs = await new FoxNoseLoader({
+        client: client as any,
+        collectionPath: 'articles',
+        pageContentField: 'body',
+        batchSize: 2,
+      }).load();
+
+      expect(listResources).toHaveBeenCalledTimes(2);
+      expect(docs).toHaveLength(4);
+    });
+
+    it('stops on a cursor cycle', async () => {
+      // A -> B -> A: no cursor repeats the PREVIOUS one, yet it never ends.
+      // Detection lands one fetch after the cycle closes -- the earliest it
+      // can, since a cursor is only known to be part of one when it comes back
+      // a second time -- so the re-served page is yielded twice.
+      const pageA = makeListResponse(SAMPLE_RESULTS.slice(0, 2), { nextCursor: url('b') });
+      const pageB = makeListResponse(SAMPLE_RESULTS.slice(2), { nextCursor: url('a') });
+      const listResources = vi
+        .fn()
+        .mockResolvedValueOnce(pageA)
+        .mockResolvedValueOnce(pageB)
+        .mockResolvedValue(pageA);
+      const client = createMockFluxClient({ listResources });
+
+      const docs = await new FoxNoseLoader({
+        client: client as any,
+        collectionPath: 'articles',
+        pageContentField: 'body',
+        batchSize: 2,
+      }).load();
+
+      expect(listResources).toHaveBeenCalledTimes(3);
+      expect(docs).toHaveLength(SAMPLE_RESULTS.length + 2);
+    });
   });
 
   it('returns empty array for empty results', async () => {
@@ -442,5 +544,53 @@ describe('FoxNoseLoader — metadata', () => {
     const docs = await loader.load();
     expect(docs[0].metadata).not.toHaveProperty('status');
     expect(docs[0].metadata).toHaveProperty('title');
+  });
+});
+
+describe('FoxNoseLoader — truncateText', () => {
+  it('sends truncate_text as a query parameter', async () => {
+    const client = createMockFluxClient();
+    await new FoxNoseLoader({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+      truncateText: 120,
+    }).load();
+    expect(client.listResources.mock.calls[0][1].truncate_text).toBe(120);
+  });
+
+  it('rejects truncateText set both directly and inside params', () => {
+    expect(
+      () =>
+        new FoxNoseLoader({
+          client: createMockFluxClient() as any,
+          collectionPath: 'articles',
+          pageContentField: 'body',
+          params: { truncate_text: 10 },
+          truncateText: 120,
+        }),
+    ).toThrow(/both directly and inside params/);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])('rejects %p as truncateText', (value) => {
+    expect(
+      () =>
+        new FoxNoseLoader({
+          client: createMockFluxClient() as any,
+          collectionPath: 'articles',
+          pageContentField: 'body',
+          truncateText: value,
+        }),
+    ).toThrow(/integer >= 1/);
+  });
+
+  it('is absent when not configured', async () => {
+    const client = createMockFluxClient();
+    await new FoxNoseLoader({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+    }).load();
+    expect(client.listResources.mock.calls[0][1]).not.toHaveProperty('truncate_text');
   });
 });

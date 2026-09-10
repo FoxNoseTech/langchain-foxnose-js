@@ -75,7 +75,7 @@ const DEFAULT_DOCUMENT_SEPARATOR = '\n\n';
  * ```ts
  * const tool = createFoxNoseTool({
  *   client,
- *   folderPath: 'knowledge-base',
+ *   collectionPath: 'knowledge-base',
  *   pageContentField: 'body',
  * });
  * ```
