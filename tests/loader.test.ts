@@ -537,3 +537,38 @@ describe('FoxNoseLoader — metadata', () => {
     expect(docs[0].metadata).toHaveProperty('title');
   });
 });
+
+describe('FoxNoseLoader — truncateText', () => {
+  it('sends truncate_text as a query parameter', async () => {
+    const client = createMockFluxClient();
+    await new FoxNoseLoader({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+      truncateText: 120,
+    }).load();
+    expect(client.listResources.mock.calls[0][1].truncate_text).toBe(120);
+  });
+
+  it('overrides the same key given through params', async () => {
+    const client = createMockFluxClient();
+    await new FoxNoseLoader({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+      params: { truncate_text: 10 },
+      truncateText: 120,
+    }).load();
+    expect(client.listResources.mock.calls[0][1].truncate_text).toBe(120);
+  });
+
+  it('is absent when not configured', async () => {
+    const client = createMockFluxClient();
+    await new FoxNoseLoader({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+    }).load();
+    expect(client.listResources.mock.calls[0][1]).not.toHaveProperty('truncate_text');
+  });
+});

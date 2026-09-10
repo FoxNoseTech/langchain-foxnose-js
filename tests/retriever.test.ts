@@ -712,3 +712,67 @@ describe('FoxNoseRetriever — LangChain integration', () => {
     expect(retriever.lc_namespace).toEqual(['langchain', 'retrievers', 'foxnose']);
   });
 });
+
+describe('FoxNoseRetriever — query-string parameters', () => {
+  // These are QUERY-STRING parameters: the search body rejects them, which is
+  // why they cannot be reached through searchKwargs.
+  const modes = [
+    ['text', 'search'],
+    ['vector', 'vectorSearch'],
+    ['hybrid', 'hybridSearch'],
+    ['vector_boosted', 'boostedSearch'],
+  ] as const;
+
+  const paramsOf = (client: any, mode: string, method: string) =>
+    mode === 'text'
+      ? client[method].mock.calls[0][2]?.params
+      : client[method].mock.calls[0][1]?.queryParams;
+
+  it.each(modes)('sends truncateText in %s mode', async (mode, method) => {
+    const client = createMockFluxClient();
+    await new FoxNoseRetriever({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+      searchMode: mode,
+      truncateText: 40,
+    }).invoke('q');
+    expect(paramsOf(client, mode, method)).toEqual({ truncate_text: 40 });
+  });
+
+  it.each(modes)('sends queryParams in %s mode', async (mode, method) => {
+    const client = createMockFluxClient();
+    await new FoxNoseRetriever({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+      searchMode: mode,
+      queryParams: { truncate_text: 25 },
+    }).invoke('q');
+    expect(paramsOf(client, mode, method)).toEqual({ truncate_text: 25 });
+  });
+
+  it('lets truncateText win over the same key in queryParams', async () => {
+    const client = createMockFluxClient();
+    await new FoxNoseRetriever({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+      searchMode: 'text',
+      queryParams: { truncate_text: 10, other: 'x' },
+      truncateText: 40,
+    }).invoke('q');
+    expect(paramsOf(client, 'text', 'search')).toEqual({ truncate_text: 40, other: 'x' });
+  });
+
+  it('sends nothing when neither is configured', async () => {
+    const client = createMockFluxClient();
+    await new FoxNoseRetriever({
+      client: client as any,
+      collectionPath: 'articles',
+      pageContentField: 'body',
+      searchMode: 'text',
+    }).invoke('q');
+    expect(paramsOf(client, 'text', 'search')).toBeUndefined();
+  });
+});

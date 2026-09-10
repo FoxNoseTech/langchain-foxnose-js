@@ -45,6 +45,13 @@ export interface FoxNoseLoaderInput extends DocumentMapperOptions {
    */
   readonly params?: Record<string, unknown>;
   /**
+   * Cap the length of `text`-typed fields server-side, in characters.
+   *
+   * A named shorthand for `params.truncate_text`, which it overrides: it is
+   * the specific option, so a caller who sets both meant the specific one.
+   */
+  readonly truncateText?: number;
+  /**
    * Page size for `listResources` calls.
    * @default 100
    */
@@ -121,6 +128,7 @@ export class FoxNoseLoader extends BaseDocumentLoader {
   /** Renamed from `folderPath` in 0.3.0. */
   private readonly collectionPath: string;
   private readonly params: Record<string, unknown>;
+  private readonly truncateText?: number;
   private readonly batchSize: number;
   private readonly mapperOptions: DocumentMapperOptions;
 
@@ -134,6 +142,7 @@ export class FoxNoseLoader extends BaseDocumentLoader {
     this.client = fields.client;
     this.collectionPath = (fields.collectionPath ?? fields.folderPath) as string;
     this.params = fields.params ?? {};
+    this.truncateText = fields.truncateText;
     this.batchSize = fields.batchSize ?? 100;
 
     this.mapperOptions = {
@@ -191,6 +200,9 @@ export class FoxNoseLoader extends BaseDocumentLoader {
         ...this.params,
         limit: this.batchSize,
       };
+      if (this.truncateText !== undefined) {
+        requestParams.truncate_text = this.truncateText;
+      }
       if (cursor !== null) {
         requestParams.next = cursor;
       }

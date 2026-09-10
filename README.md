@@ -14,6 +14,7 @@ Official [LangChain.js](https://js.langchain.com/) integration for [FoxNose](htt
 - **FoxNoseRetriever** — a LangChain `BaseRetriever` with 4 search modes: text, vector, hybrid, and vector-boosted
 - **FoxNoseLoader** — a LangChain `BaseDocumentLoader` with automatic cursor-based pagination
 - **createFoxNoseTool** — factory to wrap retrieval into a LangChain agent tool
+- **FoxNoseWriter** — write LangChain `Document` objects back into a collection, with precise partial-failure reporting
 - **Content mapping** — single field, multiple fields, or a custom mapper function
 - **Metadata control** — whitelist, blacklist, or toggle system metadata
 - **Structured filtering** — pass a `where` parameter for server-side filtering
@@ -77,6 +78,68 @@ const loader = new FoxNoseLoader({
 const docs = await loader.load();
 console.log(`Loaded ${docs.length} documents`);
 ```
+
+### Document Writer
+
+Needs a Flux key with write access, and the collection must expose `create`
+and `update` in its allowed methods.
+
+```typescript
+import { Document } from '@langchain/core/documents';
+import { FoxNoseWriter, FoxNoseBatchWriteError } from '@foxnose/langchain';
+import { ContentValidationFailedError, ExternalIdConflictError } from '@foxnose/sdk';
+
+// externalIdKey points at a metadata key holding your own stable identifier.
+// Its value is sent as the resource key for deduplication, and is kept out of
+// the document's data.
+const writer = new FoxNoseWriter({
+  client,
+  collectionPath: 'knowledge-base',
+  pageContentField: 'body',
+  externalIdKey: 'source_id',
+});
+
+try {
+  const keys = await writer.addDocuments([
+    new Document({
+      pageContent: 'FoxNose is the knowledge layer for RAG and AI agents.',
+      metadata: { title: 'What is FoxNose?', source_id: 'docs/what-is-foxnose' },
+    }),
+  ]);
+
+  // updateDocument takes the INTERNAL resource key returned above, and is a
+  // full-document replace: fields absent from the new document are removed.
+  await writer.updateDocument(keys[0], new Document({ pageContent: 'Updated.' }));
+} catch (error) {
+  if (error instanceof FoxNoseBatchWriteError) {
+    console.log('written, not rolled back:', error.writtenKeys);
+    console.log('unknown outcome:         document', error.failedIndex);
+    console.log('not attempted:           ', error.pendingIndexes);
+
+    // Branch on `cause`: every error from a batch write arrives wrapped, so a
+    // second `catch` for the SDK error type would be unreachable.
+    if (error.cause instanceof ExternalIdConflictError) {
+      console.log('  that source_id already exists');
+    } else if (error.cause instanceof ContentValidationFailedError) {
+      for (const problem of error.cause.errors) {
+        console.log(`  ${problem.json_path}: ${problem.message}`);
+      }
+    }
+  }
+  throw error;
+}
+```
+
+**Flux has no delete endpoint.** Writes cannot be rolled back, which is why
+`FoxNoseWriter` is not a LangChain `VectorStore` — `delete()` could not be
+honoured — and why a failed batch reports three separate ranges. The document
+at `failedIndex` has an **unknown** outcome, not a failed one: a validation or
+conflict error wrote nothing, but an upstream error or a transport timeout may
+have written it. Re-read it before any retry.
+
+Batches are written sequentially and stop at the first failure. There is no
+concurrency option on purpose: overlapping non-idempotent writes could not be
+reported on honestly.
 
 ### Agent Tool
 
@@ -273,7 +336,9 @@ Extends `BaseRetriever` from `@langchain/core`.
 | `hybridConfig` | `HybridConfig` | — | Hybrid mode weights |
 | `vectorBoostConfig` | `VectorBoostConfig` | — | Vector-boosted config |
 | `sort` | `string[]` | — | Sort fields |
-| `searchKwargs` | `object` | — | Extra search body params |
+| `searchKwargs` | `object` | — | Extra search **body** params |
+| `truncateText` | `number` | — | Cap `text`-typed fields server-side, in characters. A **query-string** parameter — the body rejects it |
+| `queryParams` | `object` | — | Extra **query-string** params. `truncateText` wins on conflict |
 | `embeddings` | `EmbeddingsInterface` | — | LangChain embeddings model for custom vectors |
 | `queryVector` | `number[]` | — | Pre-computed query vector |
 | `vectorField` | `string` | — | Field name for custom-embedding search |
@@ -292,8 +357,25 @@ Extends `BaseDocumentLoader` from `@langchain/core`.
 | `folderPath` | `string` | — | **Deprecated**. Legacy alias for `collectionPath`; emits a one-shot `console.warn`. Removed in 1.0. |
 | `batchSize` | `number` | `100` | Page size for pagination |
 | `params` | `object` | — | Query params for `listResources` |
+| `truncateText` | `number` | — | Cap `text`-typed fields server-side, in characters |
 | *(content mapping)* | | | Same as FoxNoseRetriever |
 | *(metadata control)* | | | Same as FoxNoseRetriever |
+
+### FoxNoseWriter
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `client` | `FluxClient` | *required* | Flux client with write access |
+| `collectionPath` | `string` | *required* | Collection to write into |
+| `pageContentField` | `string` | — | `data` field receiving `pageContent`. Exactly one of this or `documentMapper` |
+| `documentMapper` | `(doc) => object` | — | Full control over the written `data`. Owns its output — no filtering is applied to it |
+| `metadataFields` | `string[]` | — | Whitelist of metadata keys to write |
+| `excludeMetadataFields` | `string[]` | — | Blacklist of metadata keys to skip |
+| `includeSysMetadata` | `boolean` | `false` | Write the read path's `_sys`-derived keys |
+| `externalIdKey` | `string` | — | Metadata key whose value becomes the resource key. Must be a string or number |
+
+`FoxNoseBatchWriteError` carries `writtenKeys`, `failedIndex`,
+`pendingIndexes`, `total` and `cause`.
 
 ### createFoxNoseTool
 
