@@ -178,3 +178,31 @@ describe('FoxNoseWriter — updateDocument', () => {
     await expect(writer(client).updateDocument('k1', doc('x'))).rejects.toThrow(/revision_key/);
   });
 });
+
+describe('FoxNoseWriter — externalIdKey reads own properties only', () => {
+  // `metadata[key]` walks the prototype chain. Python reads a dict, which has
+  // no such chain, so these cases also keep the two packages aligned.
+  it.each(['constructor', 'toString', '__proto__'])(
+    'treats a prototype-named %s key as absent when metadata is empty',
+    async (key) => {
+      const client = createMockFluxClient();
+      await writer(client, { externalIdKey: key }).addDocuments([doc('x', {})]);
+      expect(client.createResource.mock.calls[0][2]).toBeUndefined();
+    },
+  );
+
+  it('does not send an inherited value as the resource key', async () => {
+    const client = createMockFluxClient();
+    const metadata: Record<string, unknown> = Object.create({ source_id: 'inherited' });
+    await writer(client, { externalIdKey: 'source_id' }).addDocuments([doc('x', metadata)]);
+    expect(client.createResource.mock.calls[0][2]).toBeUndefined();
+  });
+
+  it('still uses an own value', async () => {
+    const client = createMockFluxClient();
+    const metadata: Record<string, unknown> = Object.create({ source_id: 'inherited' });
+    metadata.source_id = 'own';
+    await writer(client, { externalIdKey: 'source_id' }).addDocuments([doc('x', metadata)]);
+    expect(client.createResource.mock.calls[0][2]).toEqual({ key: 'own' });
+  });
+});

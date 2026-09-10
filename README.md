@@ -339,7 +339,7 @@ Extends `BaseRetriever` from `@langchain/core`.
 | `sort` | `string[]` | — | Sort fields |
 | `searchKwargs` | `object` | — | Extra search **body** params |
 | `truncateText` | `number` | — | Cap `text`-typed fields server-side, in characters. A **query-string** parameter — the body rejects it |
-| `queryParams` | `object` | — | Extra **query-string** params. `truncateText` wins on conflict |
+| `queryParams` | `object` | — | Extra **query-string** params. Setting `truncate_text` here *and* via `truncateText` is rejected at construction |
 | `embeddings` | `EmbeddingsInterface` | — | LangChain embeddings model for custom vectors |
 | `queryVector` | `number[]` | — | Pre-computed query vector |
 | `vectorField` | `string` | — | Field name for custom-embedding search |

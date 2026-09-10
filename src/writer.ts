@@ -178,7 +178,15 @@ export class FoxNoseWriter {
     if (this.externalIdKey === undefined) {
       return undefined;
     }
-    const value = (document.metadata ?? {})[this.externalIdKey];
+    const metadata = document.metadata ?? {};
+    // Own properties only: `metadata[key]` walks the prototype chain, so an
+    // externalIdKey of `constructor` found Object.prototype.constructor and
+    // threw on empty metadata, and an inherited value was silently sent as
+    // the resource key. Python reads a dict, which has no such chain.
+    if (!Object.hasOwn(metadata, this.externalIdKey)) {
+      return undefined;
+    }
+    const value = metadata[this.externalIdKey];
     if (value === undefined || value === null) {
       return undefined;
     }
