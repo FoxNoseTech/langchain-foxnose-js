@@ -51,6 +51,32 @@ export interface FoxNoseLoaderInput extends DocumentMapperOptions {
   readonly batchSize?: number;
 }
 
+/**
+ * Reduce a `next` field to the token the `next` query parameter accepts.
+ *
+ * FoxNose returns `next` as a FULL URL, e.g.
+ * `https://host/api/articles?limit=2&next=9avd3azzc0tp`, not as the opaque
+ * token the parameter takes. Sending the whole URL back means the backend
+ * cannot parse it, silently answers with page one again and returns the same
+ * `next` — an infinite loop that re-fetches the first page forever. A plain
+ * token is passed through unchanged.
+ *
+ * @internal
+ */
+export function extractCursor(nextValue: unknown): string | null {
+  if (typeof nextValue !== 'string' || nextValue === '') {
+    return null;
+  }
+  if (!nextValue.includes('://')) {
+    return nextValue;
+  }
+  try {
+    return new URL(nextValue).searchParams.get('next');
+  } catch {
+    return null;
+  }
+}
+
 /** Shape of a paginated `listResources` response from the Flux API. */
 interface ListResourcesResponse {
   results?: FoxNoseResult[];
@@ -158,8 +184,9 @@ export class FoxNoseLoader extends BaseDocumentLoader {
    */
   async *loadLazy(): AsyncGenerator<Document[]> {
     let cursor: string | null = null;
+    const seen = new Set<string>();
 
-    do {
+    for (;;) {
       const requestParams: Record<string, unknown> = {
         ...this.params,
         limit: this.batchSize,
@@ -180,7 +207,15 @@ export class FoxNoseLoader extends BaseDocumentLoader {
         yield mapped;
       }
 
-      cursor = response?.next ?? null;
-    } while (cursor !== null);
+      const nextCursor = extractCursor(response?.next);
+      // Every cursor is followed at most once. Stopping only when the cursor
+      // repeats the PREVIOUS one would still spin forever on a cycle
+      // (A -> B -> A), and would re-yield the repeated page before noticing.
+      if (nextCursor === null || seen.has(nextCursor)) {
+        break;
+      }
+      seen.add(nextCursor);
+      cursor = nextCursor;
+    }
   }
 }
