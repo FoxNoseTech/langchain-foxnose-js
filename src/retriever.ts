@@ -82,6 +82,21 @@ export interface FoxNoseRetrieverInput extends BaseRetrieverInput, DocumentMappe
   /** Sort fields (prefix with `-` for descending). */
   readonly sort?: string[];
   /**
+   * Cap the length of `text`-typed fields server-side, in characters.
+   *
+   * Sent as the `truncate_text` QUERY-STRING parameter, not in the request
+   * body — the body rejects it. Cheaper than trimming client-side, because
+   * the payload never crosses the wire in full.
+   */
+  readonly truncateText?: number;
+  /**
+   * Extra query-string parameters for the search request.
+   *
+   * Merged with `truncateText`, which wins on conflict. Distinct from
+   * `searchKwargs`, which goes into the request BODY.
+   */
+  readonly queryParams?: Record<string, unknown>;
+  /**
    * Extra parameters merged into the search request.
    *
    * Known keys like `limit` and `offset` are extracted as named
@@ -169,6 +184,8 @@ export class FoxNoseRetriever extends BaseRetriever {
   private readonly vectorFields?: string[];
   private readonly similarityThreshold?: number;
   private readonly topK: number;
+  private readonly truncateText?: number;
+  private readonly queryParams?: Record<string, unknown>;
   private readonly where?: Record<string, unknown>;
   private readonly hybridConfig?: HybridConfig;
   private readonly vectorBoostConfig?: VectorBoostConfig;
@@ -207,6 +224,8 @@ export class FoxNoseRetriever extends BaseRetriever {
     this.hybridConfig = fields.hybridConfig;
     this.vectorBoostConfig = fields.vectorBoostConfig;
     this.sort = fields.sort;
+    this.truncateText = fields.truncateText;
+    this.queryParams = fields.queryParams;
     this.searchKwargs = fields.searchKwargs ?? {};
 
     // Custom embeddings
@@ -269,6 +288,19 @@ export class FoxNoseRetriever extends BaseRetriever {
     throw new Error("vectorField mode requires 'embeddings' or 'queryVector'.");
   }
 
+  /**
+   * Query-string parameters for a search request, or undefined when there are
+   * none. `truncateText` wins over the same key in `queryParams`: it is the
+   * specific option, so a caller who sets both meant the specific one.
+   */
+  private buildQueryParams(): Record<string, unknown> | undefined {
+    const params: Record<string, unknown> = { ...(this.queryParams ?? {}) };
+    if (this.truncateText !== undefined) {
+      params.truncate_text = this.truncateText;
+    }
+    return Object.keys(params).length > 0 ? params : undefined;
+  }
+
   // --- Per-mode dispatch ---
 
   private async searchText(query: string, named: { limit?: number; offset?: number }, _extraBody: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -289,7 +321,7 @@ export class FoxNoseRetriever extends BaseRetriever {
     // Extra from searchKwargs may override instance where/sort
     const { extra } = splitSearchKwargs(this.searchKwargs);
     Object.assign(body, extra);
-    return this.client.search(this.collectionPath, body);
+    return this.client.search(this.collectionPath, body, { params: this.buildQueryParams() });
   }
 
   private async searchVector(query: string, named: { limit?: number; offset?: number }, extraBody: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -302,6 +334,7 @@ export class FoxNoseRetriever extends BaseRetriever {
         similarity_threshold: this.similarityThreshold,
         limit: named.limit ?? this.topK,
         offset: named.offset,
+        queryParams: this.buildQueryParams(),
         ...extraBody,
       });
     }
@@ -312,6 +345,7 @@ export class FoxNoseRetriever extends BaseRetriever {
       similarity_threshold: this.similarityThreshold,
       limit: named.limit ?? this.topK,
       offset: named.offset,
+      queryParams: this.buildQueryParams(),
       ...extraBody,
     });
   }
@@ -329,6 +363,7 @@ export class FoxNoseRetriever extends BaseRetriever {
       rerank_results: hc.rerankResults ?? true,
       limit: named.limit ?? this.topK,
       offset: named.offset,
+      queryParams: this.buildQueryParams(),
       ...extraBody,
     });
   }
@@ -344,6 +379,7 @@ export class FoxNoseRetriever extends BaseRetriever {
       max_boost_results: bc.maxBoostResults ?? 20,
       limit: named.limit ?? this.topK,
       offset: named.offset,
+      queryParams: this.buildQueryParams(),
     };
     if (this.vectorField !== undefined) {
       const qv = await this.resolveQueryVector(query);
