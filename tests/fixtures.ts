@@ -99,6 +99,8 @@ export interface MockFluxClient {
   boostedSearch: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
   apiPrefix: string;
+  createResource: ReturnType<typeof vi.fn>;
+  updateResource: ReturnType<typeof vi.fn>;
 }
 
 export function createMockFluxClient(
@@ -113,6 +115,8 @@ export function createMockFluxClient(
     vectorFieldSearch: vi.fn().mockResolvedValue(defaultResponse),
     hybridSearch: vi.fn().mockResolvedValue(defaultResponse),
     boostedSearch: vi.fn().mockResolvedValue(defaultResponse),
+    createResource: vi.fn().mockResolvedValue({ resource_key: 'res_1' }),
+    updateResource: vi.fn().mockResolvedValue({ revision: 'rev_1' }),
     close: vi.fn(),
     apiPrefix: 'test-api',
     ...overrides,
