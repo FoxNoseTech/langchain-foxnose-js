@@ -28,7 +28,7 @@ npm install @foxnose/langchain @foxnose/sdk @langchain/core
 pnpm add @foxnose/langchain @foxnose/sdk @langchain/core
 ```
 
-Requires `@foxnose/sdk` >= 0.4.0 and `@langchain/core` >= 0.3.0.
+Requires `@foxnose/sdk` >= 0.6.1 and `@langchain/core` >= 0.3.0.
 
 ## Quick Start
 
@@ -61,7 +61,7 @@ for (const doc of docs) {
 > **Note (0.3.0):** The `folderPath` field on `FoxNoseRetriever`, `FoxNoseLoader`,
 > and `createFoxNoseTool` is deprecated in favor of `collectionPath`. The legacy
 > field still works but emits a one-shot `console.warn`; it will be removed in
-> 1.0. Requires `@foxnose/sdk@^0.4.0`.
+> 1.0. Requires `@foxnose/sdk@^0.6.1`.
 
 ### Document Loader
 
@@ -121,8 +121,9 @@ try {
     if (error.cause instanceof ExternalIdConflictError) {
       console.log('  that source_id already exists');
     } else if (error.cause instanceof ContentValidationFailedError) {
-      for (const problem of error.cause.errors) {
-        console.log(`  ${problem.json_path}: ${problem.message}`);
+      // The SDK types `errors` as `unknown[]`, so narrow before reading it.
+      for (const problem of error.cause.errors as Array<Record<string, unknown>>) {
+        console.log(`  ${String(problem.json_path)}: ${String(problem.message)}`);
       }
     }
   }

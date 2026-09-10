@@ -42,8 +42,14 @@ Brings the package to parity with `langchain-foxnose` 0.4.0 on the Python side.
 - **`truncateText` and `queryParams`** on `FoxNoseRetriever`, and `truncateText`
   on `FoxNoseLoader` — forward query-string parameters to cap the length of
   `text`-typed fields server-side. They could not be reached through
-  `searchKwargs`, which goes into the request body.
-- `collectionKeys` accepted alongside `folderKeys` (from the unpublished 0.3.0).
+  `searchKwargs`, which goes into the request body, and passing them there is
+  now rejected at construction with a message naming the right option. Setting
+  `truncate_text` through both a dedicated option and `queryParams`/`params` is
+  rejected too, rather than silently resolved.
+- `collectionPath` accepted alongside the now-deprecated `folderPath` on the
+  retriever, loader and tool, following the SDK's Folder -> Collection rename.
+  `folderPath` still works and emits a one-shot warning; it goes away in 1.0.
+  (From the unpublished 0.3.0.)
 
 ### Fixed
 

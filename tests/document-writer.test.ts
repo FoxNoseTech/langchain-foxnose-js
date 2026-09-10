@@ -97,3 +97,37 @@ describe('mapDocumentToData', () => {
     });
   });
 });
+
+describe('mapDocumentToData — own properties only', () => {
+  // `in` walks the prototype chain; `Object.hasOwn` does not. Python's dicts
+  // have no such chain, so these cases are also what keeps the two packages
+  // behaving alike.
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+    'accepts %s as the content field when metadata is empty',
+    (field) => {
+      const data = mapDocumentToData(new Document({ pageContent: 'x', metadata: {} }), {
+        pageContentField: field,
+      });
+      expect(data[field]).toBe('x');
+    },
+  );
+
+  it('still rejects a genuine collision on a prototype-named field', () => {
+    expect(() =>
+      mapDocumentToData(
+        new Document({ pageContent: 'x', metadata: { constructor: 'clash' } }),
+        { pageContentField: 'constructor' },
+      ),
+    ).toThrow(/collides/);
+  });
+
+  it('does not copy inherited metadata through the whitelist', () => {
+    const metadata: Record<string, unknown> = Object.create({ inherited: 'leak' });
+    metadata.own = 'keep';
+    const data = mapDocumentToData(new Document({ pageContent: 'x', metadata }), {
+      pageContentField: 'body',
+      metadataFields: ['own', 'inherited'],
+    });
+    expect(data).toEqual({ body: 'x', own: 'keep' });
+  });
+});

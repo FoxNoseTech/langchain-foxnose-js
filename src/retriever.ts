@@ -92,8 +92,9 @@ export interface FoxNoseRetrieverInput extends BaseRetrieverInput, DocumentMappe
   /**
    * Extra query-string parameters for the search request.
    *
-   * Merged with `truncateText`, which wins on conflict. Distinct from
-   * `searchKwargs`, which goes into the request BODY.
+   * Setting `truncate_text` here AND via `truncateText` is rejected at
+   * construction rather than silently resolved. Distinct from `searchKwargs`,
+   * which goes into the request BODY and rejects these keys.
    */
   readonly queryParams?: Record<string, unknown>;
   /**
@@ -290,8 +291,8 @@ export class FoxNoseRetriever extends BaseRetriever {
 
   /**
    * Query-string parameters for a search request, or undefined when there are
-   * none. `truncateText` wins over the same key in `queryParams`: it is the
-   * specific option, so a caller who sets both meant the specific one.
+   * none. Setting `truncate_text` through both options is rejected at
+   * construction, so there is no conflict to resolve here.
    */
   private buildQueryParams(): Record<string, unknown> | undefined {
     const params: Record<string, unknown> = { ...(this.queryParams ?? {}) };

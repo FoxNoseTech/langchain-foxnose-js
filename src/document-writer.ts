@@ -96,12 +96,16 @@ export function mapDocumentToData(
   }
 
   const metadata = document.metadata ?? {};
-  let selected: Record<string, unknown>;
+  // Own properties only, throughout. `in` walks the prototype chain, so it
+  // would copy inherited metadata into the whitelist result and reject a
+  // perfectly valid schema field named `constructor`, `toString` or
+  // `__proto__` even when the metadata is empty. Python's dicts have no such
+  // chain, so this is also what keeps the two packages behaving alike.
+  const selected: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
 
   if (metadataFields !== undefined) {
-    selected = {};
     for (const field of metadataFields) {
-      if (field in metadata && !dropped.has(field)) {
+      if (Object.hasOwn(metadata, field) && !dropped.has(field)) {
         selected[field] = metadata[field];
       }
     }
@@ -110,7 +114,6 @@ export function mapDocumentToData(
     for (const field of excludeMetadataFields ?? []) {
       exclude.add(field);
     }
-    selected = {};
     for (const [field, value] of Object.entries(metadata)) {
       if (!exclude.has(field)) {
         selected[field] = value;
@@ -118,12 +121,12 @@ export function mapDocumentToData(
     }
   }
 
-  if (pageContentField in selected) {
+  if (Object.hasOwn(selected, pageContentField)) {
     throw new Error(
       `Metadata key '${pageContentField}' collides with pageContentField. ` +
         `Exclude it via 'excludeMetadataFields' or use a custom 'documentMapper'.`,
     );
   }
 
-  return { [pageContentField]: document.pageContent, ...selected };
+  return { ...selected, [pageContentField]: document.pageContent };
 }

@@ -155,9 +155,13 @@ describe('FoxNoseWriter — partial failure', () => {
 });
 
 describe('FoxNoseWriter — updateDocument', () => {
-  it('replaces by internal resource key and returns the revision', async () => {
+  it('replaces by internal resource key and returns the revision key', async () => {
+    // The response field is `revision_key`. Mocking `revision` here made this
+    // test pass while every real update returned undefined.
     const client = createMockFluxClient({
-      updateResource: vi.fn().mockResolvedValue({ revision: 'rev_9' }),
+      updateResource: vi
+        .fn()
+        .mockResolvedValue({ resource_key: 'k1', revision_key: 'rev_9', published: true }),
     });
 
     const revision = await writer(client).updateDocument('k1', doc('updated', { title: 'T' }));
@@ -169,8 +173,8 @@ describe('FoxNoseWriter — updateDocument', () => {
     });
   });
 
-  it('returns undefined when the API reports no revision', async () => {
+  it('throws when the response carries no revision key', async () => {
     const client = createMockFluxClient({ updateResource: vi.fn().mockResolvedValue({}) });
-    expect(await writer(client).updateDocument('k1', doc('x'))).toBeUndefined();
+    await expect(writer(client).updateDocument('k1', doc('x'))).rejects.toThrow(/revision_key/);
   });
 });

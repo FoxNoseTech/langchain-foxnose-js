@@ -273,15 +273,19 @@ export class FoxNoseWriter {
    *
    * @param resourceKey The key returned by {@link addDocuments}, not the
    *   external id.
-   * @returns The new revision identifier, when the API reports one.
+   * @returns The new `revision_key`.
    */
-  async updateDocument(resourceKey: string, document: Document): Promise<string | undefined> {
-    const response = await this.client.updateResource<{ revision?: unknown }>(
+  async updateDocument(resourceKey: string, document: Document): Promise<string> {
+    const response = await this.client.updateResource<{ revision_key?: unknown }>(
       this.collectionPath,
       resourceKey,
       this.mapData(document),
     );
-    const revision = response?.revision;
-    return revision === undefined || revision === null ? undefined : String(revision);
+    // The API field is `revision_key`, not `revision`.
+    const revisionKey = response?.revision_key;
+    if (revisionKey === undefined || revisionKey === null) {
+      throw new Error("Update succeeded but the response carried no 'revision_key'.");
+    }
+    return String(revisionKey);
   }
 }

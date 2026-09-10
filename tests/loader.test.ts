@@ -181,7 +181,7 @@ describe('FoxNoseLoader — load', () => {
       expect(extractCursor('abc123')).toBe('abc123');
     });
 
-    it.each([null, undefined, '', 'https://host/api/articles?limit=2', 42, { a: 1 }])(
+    it.each([null, undefined, '', 'https://host/api/articles?limit=2', 'https://host/api/articles?limit=2&next=', 42, { a: 1 }])(
       'treats %p as the end of pagination',
       (value) => {
         expect(extractCursor(value)).toBeNull();
@@ -550,16 +550,29 @@ describe('FoxNoseLoader — truncateText', () => {
     expect(client.listResources.mock.calls[0][1].truncate_text).toBe(120);
   });
 
-  it('overrides the same key given through params', async () => {
-    const client = createMockFluxClient();
-    await new FoxNoseLoader({
-      client: client as any,
-      collectionPath: 'articles',
-      pageContentField: 'body',
-      params: { truncate_text: 10 },
-      truncateText: 120,
-    }).load();
-    expect(client.listResources.mock.calls[0][1].truncate_text).toBe(120);
+  it('rejects truncateText set both directly and inside params', () => {
+    expect(
+      () =>
+        new FoxNoseLoader({
+          client: createMockFluxClient() as any,
+          collectionPath: 'articles',
+          pageContentField: 'body',
+          params: { truncate_text: 10 },
+          truncateText: 120,
+        }),
+    ).toThrow(/both directly and inside params/);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN])('rejects %p as truncateText', (value) => {
+    expect(
+      () =>
+        new FoxNoseLoader({
+          client: createMockFluxClient() as any,
+          collectionPath: 'articles',
+          pageContentField: 'body',
+          truncateText: value,
+        }),
+    ).toThrow(/integer >= 1/);
   });
 
   it('is absent when not configured', async () => {

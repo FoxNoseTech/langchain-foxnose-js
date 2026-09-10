@@ -116,7 +116,7 @@ export function createMockFluxClient(
     hybridSearch: vi.fn().mockResolvedValue(defaultResponse),
     boostedSearch: vi.fn().mockResolvedValue(defaultResponse),
     createResource: vi.fn().mockResolvedValue({ resource_key: 'res_1' }),
-    updateResource: vi.fn().mockResolvedValue({ revision: 'rev_1' }),
+    updateResource: vi.fn().mockResolvedValue({ resource_key: 'res_1', revision_key: 'rev_1' }),
     close: vi.fn(),
     apiPrefix: 'test-api',
     ...overrides,

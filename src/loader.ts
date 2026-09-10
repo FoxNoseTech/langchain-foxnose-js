@@ -47,8 +47,8 @@ export interface FoxNoseLoaderInput extends DocumentMapperOptions {
   /**
    * Cap the length of `text`-typed fields server-side, in characters.
    *
-   * A named shorthand for `params.truncate_text`, which it overrides: it is
-   * the specific option, so a caller who sets both meant the specific one.
+   * A named shorthand for `params.truncate_text`. Setting both is rejected at
+   * construction rather than silently resolved.
    */
   readonly truncateText?: number;
   /**
@@ -78,7 +78,10 @@ export function extractCursor(nextValue: unknown): string | null {
     return nextValue;
   }
   try {
-    return new URL(nextValue).searchParams.get('next');
+    // `?next=` parses to an empty string, not null. Following it would send an
+    // empty cursor and re-fetch page one; Python's parse_qs drops blank values,
+    // so treating it as the end is also what keeps the two packages aligned.
+    return new URL(nextValue).searchParams.get('next') || null;
   } catch {
     return null;
   }

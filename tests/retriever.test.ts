@@ -752,18 +752,62 @@ describe('FoxNoseRetriever — query-string parameters', () => {
     expect(paramsOf(client, mode, method)).toEqual({ truncate_text: 25 });
   });
 
-  it('lets truncateText win over the same key in queryParams', async () => {
+  it('rejects truncateText set both directly and inside queryParams', () => {
+    // Silently picking a winner would make the ignored one look effective.
+    expect(
+      () =>
+        new FoxNoseRetriever({
+          client: createMockFluxClient() as any,
+          collectionPath: 'articles',
+          pageContentField: 'body',
+          queryParams: { truncate_text: 10 },
+          truncateText: 40,
+        }),
+    ).toThrow(/both directly and inside queryParams/);
+  });
+
+  it('merges queryParams alongside truncateText when they do not collide', async () => {
     const client = createMockFluxClient();
     await new FoxNoseRetriever({
       client: client as any,
       collectionPath: 'articles',
       pageContentField: 'body',
       searchMode: 'text',
-      queryParams: { truncate_text: 10, other: 'x' },
+      queryParams: { other: 'x' },
       truncateText: 40,
     }).invoke('q');
     expect(paramsOf(client, 'text', 'search')).toEqual({ truncate_text: 40, other: 'x' });
   });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects %p as truncateText',
+    (value) => {
+      expect(
+        () =>
+          new FoxNoseRetriever({
+            client: createMockFluxClient() as any,
+            collectionPath: 'articles',
+            pageContentField: 'body',
+            truncateText: value,
+          }),
+      ).toThrow(/integer >= 1/);
+    },
+  );
+
+  it.each(['truncate_text', 'queryParams', 'query_params'])(
+    'rejects %s in searchKwargs, where it would reach the body',
+    (key) => {
+      expect(
+        () =>
+          new FoxNoseRetriever({
+            client: createMockFluxClient() as any,
+            collectionPath: 'articles',
+            pageContentField: 'body',
+            searchKwargs: { [key]: 10 },
+          }),
+      ).toThrow(/query-string parameters/);
+    },
+  );
 
   it('sends nothing when neither is configured', async () => {
     const client = createMockFluxClient();
