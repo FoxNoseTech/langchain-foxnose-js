@@ -188,6 +188,15 @@ describe('FoxNoseLoader — load', () => {
       },
     );
 
+    it.each(['://', 'http://', 'https://[', 'foo://bar baz'])(
+      'ends pagination on %p, which looks like a URL but does not parse',
+      (value) => {
+        // The `://` test routes these into the URL parser, which throws. A
+        // cursor nobody can read is the end of the road, not a crash.
+        expect(extractCursor(value)).toBeNull();
+      },
+    );
+
     it('sends the extracted token, not the whole URL', async () => {
       const client = createMockFluxClient({
         listResources: vi

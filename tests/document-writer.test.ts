@@ -131,3 +131,12 @@ describe('mapDocumentToData — own properties only', () => {
     expect(data).toEqual({ body: 'x', own: 'keep' });
   });
 });
+
+describe('mapDocumentToData — missing metadata', () => {
+  it('treats a document with no metadata as having none', () => {
+    // LangChain's Document defaults metadata to {}, but the mapper must not
+    // assume the default was applied to whatever it is handed.
+    const bare = { pageContent: 'x' } as unknown as Document;
+    expect(mapDocumentToData(bare, { pageContentField: 'body' })).toEqual({ body: 'x' });
+  });
+});

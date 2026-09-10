@@ -87,6 +87,29 @@ describe('FoxNoseWriter — addDocuments', () => {
     expect(client.createResource.mock.calls[0][2]).toBeUndefined();
   });
 
+  it.each([null, undefined])(
+    'writes without a key when the external id is present but %p',
+    async (value) => {
+      // Distinct from the key being absent: this reaches the nullish check
+      // rather than the own-property guard above it.
+      const client = createMockFluxClient();
+      await writer(client, { externalIdKey: 'source_id' }).addDocuments([
+        doc('one', { source_id: value }),
+      ]);
+      expect(client.createResource.mock.calls[0][2]).toBeUndefined();
+    },
+  );
+
+  it('tolerates a document with no metadata at all', async () => {
+    // LangChain's Document defaults metadata to {}, but the type allows a
+    // bare object, and the writer must not assume the default was applied.
+    const client = createMockFluxClient();
+    const bare = { pageContent: 'one' } as unknown as Document;
+    await writer(client, { externalIdKey: 'source_id' }).addDocuments([bare]);
+    expect(client.createResource.mock.calls[0][1]).toEqual({ body: 'one' });
+    expect(client.createResource.mock.calls[0][2]).toBeUndefined();
+  });
+
   it.each([[true], [{ a: 1 }], [['x']]])(
     'rejects %p as an external id before writing anything',
     async (value) => {
